@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3b27a27a4895a9a8391ea71c18f257ee629dfba41211e25b624988773e6056f1
+-- hash: 993c6183db37041222a0c4a3a91e263a1d29906e101eebca2908bf990faea4b6
 
 name:           joe
 version:        0.1.0.0
@@ -31,12 +31,16 @@ library
       Gen
       Lib
       Parser
+      Scope
+      TypeAssignment
+      Types
   other-modules:
       Paths_joe
   hs-source-dirs:
       src
   build-depends:
       base >=4.7 && <5
+    , containers
     , llvm-hs-pretty
     , llvm-hs-pure
     , parsec
@@ -52,6 +56,7 @@ executable joe-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , joe
     , llvm-hs-pretty
     , llvm-hs-pure
@@ -69,6 +74,7 @@ test-suite joe-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , joe
     , llvm-hs-pretty
     , llvm-hs-pure

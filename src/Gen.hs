@@ -2,6 +2,8 @@
 module Gen where
 
 import qualified AST
+import qualified TypeAssignment
+import qualified Types
 
 import Control.Monad (join)
 import qualified Data.List as List
@@ -13,20 +15,20 @@ import qualified LLVM.AST.Type as T
 import LLVM.IRBuilder.Monad (IRBuilder, emptyIRBuilder, execIRBuilder)
 import LLVM.IRBuilder.Instruction (ret)
 
-gen :: [AST.TopLevel] -> LLVM.Module
+gen :: [TypeAssignment.TypedTopLevel] -> LLVM.Module
 gen tree = LLVM.defaultModule {
   LLVM.moduleName = "in.j",
   LLVM.moduleDefinitions = join $ map genTopLevel tree
   }
 
-genTopLevel :: AST.TopLevel -> [LLVM.Definition]
-genTopLevel (AST.TopLevel _ name body) = [LLVM.GlobalDefinition $ G.functionDefaults {
+genTopLevel :: TypeAssignment.TypedTopLevel -> [LLVM.Definition]
+genTopLevel (TypeAssignment.TypedFunction datatype name body) = [LLVM.GlobalDefinition $ G.functionDefaults {
   G.name = fromString name,
   G.parameters = ([], False),
-  G.returnType = T.i32,
+  G.returnType = Types.toLLVMType datatype,
   G.basicBlocks = bodyCode
   }]
   where bodyCode = execIRBuilder emptyIRBuilder $ exprToLLVM body >>= ret
 
-exprToLLVM :: AST.Expression -> IRBuilder LLVM.Operand
-exprToLLVM (AST.IntLiteral literal) = return $ LLVM.ConstantOperand $ C.Int 32 $ fromIntegral literal
+exprToLLVM :: TypeAssignment.TypedExpression -> IRBuilder LLVM.Operand
+exprToLLVM (TypeAssignment.TypedExpression datatype (AST.IntLiteral literal)) = return $ LLVM.ConstantOperand $ Types.constantInt  datatype literal

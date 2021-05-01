@@ -57,4 +57,4 @@ mod = do
 expression :: Parser AST.Expression 
 expression = do
   num <- many1 digit
-  return $ AST.IntLiteral  $ read num
+  return $ AST.IntLiteral $ read num
