@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d75da8ce32111070886b6f9764fb080cfee7a69902b3178614851230b85ec770
+-- hash: 3b27a27a4895a9a8391ea71c18f257ee629dfba41211e25b624988773e6056f1
 
 name:           joe
 version:        0.1.0.0
@@ -27,13 +27,20 @@ source-repository head
 
 library
   exposed-modules:
+      AST
+      Gen
       Lib
+      Parser
   other-modules:
       Paths_joe
   hs-source-dirs:
       src
   build-depends:
       base >=4.7 && <5
+    , llvm-hs-pretty
+    , llvm-hs-pure
+    , parsec
+    , text
   default-language: Haskell2010
 
 executable joe-exe
@@ -46,6 +53,10 @@ executable joe-exe
   build-depends:
       base >=4.7 && <5
     , joe
+    , llvm-hs-pretty
+    , llvm-hs-pure
+    , parsec
+    , text
   default-language: Haskell2010
 
 test-suite joe-test
@@ -59,4 +70,8 @@ test-suite joe-test
   build-depends:
       base >=4.7 && <5
     , joe
+    , llvm-hs-pretty
+    , llvm-hs-pure
+    , parsec
+    , text
   default-language: Haskell2010
