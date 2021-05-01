@@ -1,6 +1,6 @@
 module Parser where
 
-import Text.Parsec (many, many1, (<|>), skipMany, skipMany1)
+import Text.Parsec (choice, many, many1, (<|>), skipMany, skipMany1, try)
 import Text.Parsec.Text.Lazy (Parser)
 import Text.ParserCombinators.Parsec.Char (alphaNum, char, digit, lower, newline, string, upper)
 
@@ -55,6 +55,14 @@ mod = do
   return res
 
 expression :: Parser AST.Expression 
-expression = do
-  num <- many1 digit
-  return $ AST.IntLiteral $ read num
+expression = choice [try add, try atom]
+  where atom = do
+          num <- many1 digit
+          return $ AST.IntLiteral $ read num
+        add = do
+          first <- atom
+          ws
+          char '+'
+          ws
+          rest <- expression
+          return $ AST.Add first rest

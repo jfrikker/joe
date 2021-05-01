@@ -13,7 +13,7 @@ import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.Global as G
 import qualified LLVM.AST.Type as T
 import LLVM.IRBuilder.Monad (IRBuilder, emptyIRBuilder, execIRBuilder)
-import LLVM.IRBuilder.Instruction (ret)
+import LLVM.IRBuilder.Instruction (add, ret)
 
 gen :: [TypeAssignment.TypedTopLevel] -> LLVM.Module
 gen tree = LLVM.defaultModule {
@@ -31,4 +31,8 @@ genTopLevel (TypeAssignment.TypedFunction datatype name body) = [LLVM.GlobalDefi
   where bodyCode = execIRBuilder emptyIRBuilder $ exprToLLVM body >>= ret
 
 exprToLLVM :: TypeAssignment.TypedExpression -> IRBuilder LLVM.Operand
-exprToLLVM (TypeAssignment.TypedExpression datatype (AST.IntLiteral literal)) = return $ LLVM.ConstantOperand $ Types.constantInt  datatype literal
+exprToLLVM (TypeAssignment.TypedAdd datatype e1 e2) = do
+  e1Op <- exprToLLVM e1
+  e2Op <- exprToLLVM e2
+  add e1Op e2Op
+exprToLLVM (TypeAssignment.TypedIntLiteral datatype literal) = return $ LLVM.ConstantOperand $ Types.constantInt datatype literal
