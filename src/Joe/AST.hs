@@ -1,4 +1,4 @@
-module AST where
+module Joe.AST where
 
 data TopLevel = TopLevel TypeSignature String [PartialDefinition] deriving Show
 

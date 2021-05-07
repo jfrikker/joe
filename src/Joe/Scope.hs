@@ -1,13 +1,13 @@
-module Scope where
+module Joe.Scope where
 
-import AST
-import Types
+import qualified Joe.AST as AST
+import qualified Joe.Types as Types
 
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 
 data Scope = Scope {
-  datatypes :: Map.Map String DataType
+  datatypes :: Map.Map String Types.DataType
 }
 
 globalScope :: Scope

@@ -1,4 +1,4 @@
-module Types where
+module Joe.Types where
 
 import qualified LLVM.AST.Type as T
 import qualified LLVM.AST.Constant as C

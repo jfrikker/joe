@@ -1,11 +1,7 @@
 module Main where
 
-import Lib
-import Parser
-import Scope
+import qualified Joe.Parser as Parser
 
-import qualified Data.Text.Lazy.IO as TIO
-import LLVM.Pretty (ppllvm)
 import Text.Parsec.Text.Lazy (parseFromFile)
 
 main :: IO ()
