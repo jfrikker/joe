@@ -6,19 +6,26 @@ module Joe.Parser.Expression (
 
 import qualified Joe.AST as AST
 import Joe.Parser.Util (identifier, literalOp, lexeme)
-import Text.Parsec(Stream, ParsecT, (<|>), chainl1, digit, many1)
+import Text.Parsec(Stream, ParsecT, (<|>), chainl1, choice, digit, many1, string, try)
 
 expression :: Stream s m Char => ParsecT s u m AST.Expression
-expression = expressionAdd expressionAtom
+expression = call $ add atom
 
-expressionAdd :: Stream s m Char => ParsecT s u m AST.Expression -> ParsecT s u m AST.Expression
-expressionAdd next = chainl1 next $ do
+call :: Stream s m Char => ParsecT s u m AST.Expression -> ParsecT s u m AST.Expression
+call next = chainl1 next $ return AST.Call
+
+add :: Stream s m Char => ParsecT s u m AST.Expression -> ParsecT s u m AST.Expression
+add next = chainl1 next $ do
   literalOp "+"
   return AST.Add
 
-expressionAtom :: Stream s m Char => ParsecT s u m AST.Expression 
-expressionAtom = ref <|> intLiteral
+atom :: Stream s m Char => ParsecT s u m AST.Expression 
+atom = ref <|> intLiteral
   where ref = AST.Reference <$> identifier
-        intLiteral = do
-          num <- lexeme $ many1 digit
-          return $ AST.IntLiteral $ read num
+        intLiteral = lexeme $ do
+          num <- many1 digit
+          ty <- choice [intType "i32" AST.I32Literal, intType "i64" AST.I64Literal]
+          return $ ty $ read num
+        intType c ty = do
+          try $ string c
+          return ty

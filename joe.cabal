@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 05df6ab0d01a5a33d4367d377a899ae2001c48c96c37764635f1f01860ddc51f
+-- hash: ce29f55cd26c2973c69c08775c63f93520c09a4c5083cedab9247b63064ccb16
 
 name:           joe
 version:        0.1.0.0
@@ -45,6 +45,7 @@ library
     , llvm-hs-pretty
     , llvm-hs-pure
     , parsec
+    , pretty-simple
     , text
   default-language: Haskell2010
 
@@ -62,6 +63,7 @@ executable joe-exe
     , llvm-hs-pretty
     , llvm-hs-pure
     , parsec
+    , pretty-simple
     , text
   default-language: Haskell2010
 
@@ -80,5 +82,6 @@ test-suite joe-test
     , llvm-hs-pretty
     , llvm-hs-pure
     , parsec
+    , pretty-simple
     , text
   default-language: Haskell2010

@@ -25,6 +25,7 @@ dependencies:
 - llvm-hs-pretty
 - llvm-hs-pure
 - parsec
+- pretty-simple
 - text
 
 library:

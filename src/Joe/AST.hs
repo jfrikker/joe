@@ -10,6 +10,8 @@ data TypeSignature =
   FunctionType TypeSignature TypeSignature deriving Show
 
 data Expression =
+  Call Expression Expression |
   Add Expression Expression |
   Reference String |
-  IntLiteral Integer deriving Show
+  I32Literal Integer |
+  I64Literal Integer deriving Show
