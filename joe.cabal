@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ce29f55cd26c2973c69c08775c63f93520c09a4c5083cedab9247b63064ccb16
+-- hash: 1a7f069441f9266e3079e747392562145dcc6263c3ba01eaf41de4abb21a0e24
 
 name:           joe
 version:        0.1.0.0
@@ -27,6 +27,7 @@ source-repository head
 
 library
   exposed-modules:
+      Joe
       Joe.AST
       Joe.Parser
       Joe.Parser.Expression
@@ -44,6 +45,7 @@ library
     , containers
     , llvm-hs-pretty
     , llvm-hs-pure
+    , mtl
     , parsec
     , pretty-simple
     , text
@@ -62,6 +64,7 @@ executable joe-exe
     , joe
     , llvm-hs-pretty
     , llvm-hs-pure
+    , mtl
     , parsec
     , pretty-simple
     , text
@@ -81,6 +84,7 @@ test-suite joe-test
     , joe
     , llvm-hs-pretty
     , llvm-hs-pure
+    , mtl
     , parsec
     , pretty-simple
     , text

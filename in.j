@@ -12,3 +12,6 @@ test4 a b c = a + b + c
 
 test5 :: I32 -> I32
 test5 = test4 5i32 10i32
+
+main :: I32
+main = test5 3i32
