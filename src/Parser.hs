@@ -52,16 +52,21 @@ topLevel = do
   options <- many1 $ do
     string name
     ws
-    args <- many $ do
-      ret <- identifier
-      ws
-      return ret
-    char '='
-    ws
-    body <- expression
+    def <- partialDefinition
     newline
-    return $ AST.PartialDefinition args body
+    return def
   return $ AST.TopLevel ts name options
+
+partialDefinition :: Parser AST.PartialDefinition
+partialDefinition = body <|> arg
+  where body = do
+          char '='
+          ws
+          AST.Body <$> expression
+        arg = do
+          a <- identifier
+          ws
+          AST.FunctionArgument a <$> partialDefinition
 
 mod :: Parser [AST.TopLevel]
 mod = do

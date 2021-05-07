@@ -2,7 +2,8 @@ module AST where
 
 data TopLevel = TopLevel TypeSignature String [PartialDefinition] deriving Show
 
-data PartialDefinition = PartialDefinition [String] Expression deriving Show
+data PartialDefinition = FunctionArgument String PartialDefinition |
+  Body Expression deriving Show
 
 data TypeSignature = 
   NamedType String |
