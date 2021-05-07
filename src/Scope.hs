@@ -19,4 +19,4 @@ globalScope = Scope {
 }
 
 resolveType :: Scope -> AST.TypeSignature -> Types.DataType
-resolveType Scope {datatypes = dt} (AST.TypeNamed name) = fromJust $ Map.lookup name dt
+resolveType Scope {datatypes = dt} (AST.NamedType name) = fromJust $ Map.lookup name dt

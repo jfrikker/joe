@@ -6,3 +6,6 @@ test2 = 456
 
 test3 :: I32
 test3 = 123 + 456
+
+test4 :: I32 -> I32 -> I32 -> I32
+test4 a b c = a + b + c

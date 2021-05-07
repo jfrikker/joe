@@ -1,6 +1,6 @@
 module Parser where
 
-import Text.Parsec (choice, many, many1, (<|>), skipMany, skipMany1, try)
+import Text.Parsec (chainl1, choice, many, many1, optionMaybe, (<|>), skipMany, skipMany1, try)
 import Text.Parsec.Text.Lazy (Parser)
 import Text.ParserCombinators.Parsec.Char (alphaNum, char, digit, lower, newline, string, upper)
 
@@ -30,8 +30,16 @@ typeName = do
   return $ first : rest
 
 typeSignature :: Parser AST.TypeSignature
-typeSignature = named
-  where named = AST.TypeNamed <$> typeName
+typeSignature = function
+  where function = do
+          arg <- named
+          ret <- optionMaybe $ try $ do
+            ws
+            string "->"
+            ws
+            function
+          return $ maybe arg (AST.FunctionType arg) ret
+        named = AST.NamedType <$> typeName
 
 topLevel :: Parser AST.TopLevel
 topLevel = do
@@ -40,13 +48,20 @@ topLevel = do
   string "::"
   ws
   ts <- typeSignature
-  line
-  string name
-  ws
-  char '='
-  ws
-  body <- expression
-  return $ AST.TopLevel ts name body
+  newline
+  options <- many1 $ do
+    string name
+    ws
+    args <- many $ do
+      ret <- identifier
+      ws
+      return ret
+    char '='
+    ws
+    body <- expression
+    newline
+    return $ AST.PartialDefinition args body
+  return $ AST.TopLevel ts name options
 
 mod :: Parser [AST.TopLevel]
 mod = do
@@ -55,14 +70,20 @@ mod = do
   return res
 
 expression :: Parser AST.Expression 
-expression = choice [try add, try atom]
-  where atom = do
+expression = expressionAdd expressionAtom
+
+expressionAdd :: Parser AST.Expression -> Parser AST.Expression
+expressionAdd next = chainl1 next $ do
+  ws
+  char '+'
+  ws
+  return AST.Add
+
+expressionAtom :: Parser AST.Expression 
+expressionAtom = ref <|> intLiteral
+  where ref = do
+          name <- identifier
+          return $ AST.Reference name
+        intLiteral = do
           num <- many1 digit
           return $ AST.IntLiteral $ read num
-        add = do
-          first <- atom
-          ws
-          char '+'
-          ws
-          rest <- expression
-          return $ AST.Add first rest
