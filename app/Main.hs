@@ -12,5 +12,6 @@ main = do
   tree <- parseFromFile Parser.mod "in.j"
   pPrint tree
   let (Right tree') = tree;
-  let (Right mod) = compile tree'
-  TIO.putStrLn $ ppllvm mod
+  case compile tree' of
+    Left err -> print err
+    Right mod -> TIO.putStrLn $ ppllvm mod

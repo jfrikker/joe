@@ -16,28 +16,40 @@ import qualified LLVM.AST.Global as G
 import qualified LLVM.AST.Type as T
 import qualified LLVM.IRBuilder as IR
 
-type CompilerM a = Scope.ScopeT (Except.Except Error.CompileError) a
+type CompilerM a = Except.Except Error.CompileError a
+
+type IRM a = IR.IRBuilderT (Except.Except Error.CompileError) a
 
 compile :: [AST.TopLevel] -> Either Error.CompileError LLVM.Module
-compile tl = return LLVM.defaultModule {
+compile tl = Except.runExcept $ do
+  mainDef <- compileFunction "main" mainBody
+  return LLVM.defaultModule {
     LLVM.moduleName = "in.j",
-    LLVM.moduleDefinitions = [compileFunction "main" mainBody]
+    LLVM.moduleDefinitions = [mainDef]
   }
   where (Just (AST.TopLevel _ _ mainBody)) = List.find (\(AST.TopLevel _ n _) -> n == "main") tl
 
-compileFunction :: String -> [AST.PartialDefinition] -> LLVM.Definition
-compileFunction name [AST.Body expr] = LLVM.GlobalDefinition $ LLVM.functionDefaults {
-  G.name = fromString name,
-  G.returnType = T.i32,
-  G.basicBlocks = IR.execIRBuilder IR.emptyIRBuilder $ expressionToLlvm expr >>= IR.ret
-}
+compileFunction :: String -> [AST.PartialDefinition] -> CompilerM LLVM.Definition
+compileFunction name [AST.Body expr] = do
+  blocks <- IR.execIRBuilderT IR.emptyIRBuilder $ do
+    (_, body) <- expressionToLlvm expr
+    IR.ret body
+  return $ LLVM.GlobalDefinition $ LLVM.functionDefaults {
+    G.name = fromString name,
+    G.returnType = T.i32,
+    G.basicBlocks = blocks
+  }
 
-expressionToLlvm :: AST.Expression -> IR.IRBuilder LLVM.Operand
-expressionToLlvm (AST.I32Literal num) = return $ IR.int32 num
+expressionToLlvm :: AST.Expression -> IRM (Types.DataType, LLVM.Operand)
 expressionToLlvm (AST.Add op1 op2) = do
-  op1' <- expressionToLlvm op1
-  op2' <- expressionToLlvm op2
-  IR.add op1' op2'
+  (ty1, op1') <- expressionToLlvm op1
+  (ty2, op2') <- expressionToLlvm op2
+  unless (ty1 == ty2) $ Except.throwError $  Error.TypeError ty1 ty2
+  res <- IR.add op1' op2'
+  return (ty1, res)
+
+expressionToLlvm (AST.I32Literal num) = return (Types.I32, IR.int32 num)
+expressionToLlvm (AST.I64Literal num) = return (Types.I64, IR.int64 num)
 
 -- data CompileError = TypeError Types.DataType Types.DataType deriving Show
 
