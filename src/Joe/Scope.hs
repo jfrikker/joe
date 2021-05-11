@@ -15,23 +15,21 @@ import qualified Control.Monad.Trans as Trans
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 
-data Binding = 
-
 data Scope = GlobalScope {
   datatypes :: Map.Map String Types.DataType,
-  bindings :: Map.Map String 
+  bindings :: Map.Map String Types.DataType
 }
 
 globalScope :: Scope
-globalScope = Scope {
+globalScope = GlobalScope {
   datatypes = Map.fromList [
     ("I32", Types.I32),
     ("I64", Types.I64)
   ]
 }
 
-resolveType :: Scope -> AST.TypeSignature -> Types.DataType
-resolveType Scope {datatypes = dt} (AST.NamedType name) = fromJust $ Map.lookup name dt
+-- resolveType :: Scope -> AST.TypeSignature -> Types.DataType
+-- resolveType Scope {datatypes = dt} (AST.NamedType name) = fromJust $ Map.lookup name dt
 
 class MonadScope s where
   resolveReferenceType :: String -> s a
@@ -50,5 +48,5 @@ instance Except.MonadError e m => Except.MonadError e (ScopeT m) where
 runScopeT :: Monad m => ScopeT m a -> Scope -> m a
 runScopeT (ScopeT s) = State.evalStateT s
 
-instance MonadScope (ScopeT m) where
-  resolveReferenceType name = do
+-- instance MonadScope (ScopeT m) where
+--   resolveReferenceType name = do

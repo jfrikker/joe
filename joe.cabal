@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1a7f069441f9266e3079e747392562145dcc6263c3ba01eaf41de4abb21a0e24
+-- hash: 8923aec41dde8c85c34f8b16894412882a73cc043e5cc20bea4448aa576b563e
 
 name:           joe
 version:        0.1.0.0
@@ -29,6 +29,7 @@ library
   exposed-modules:
       Joe
       Joe.AST
+      Joe.Error
       Joe.Parser
       Joe.Parser.Expression
       Joe.Parser.TypeSignature
