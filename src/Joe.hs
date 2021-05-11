@@ -34,6 +34,10 @@ compileFunction name [AST.Body expr] = LLVM.GlobalDefinition $ LLVM.functionDefa
 
 expressionToLlvm :: AST.Expression -> IR.IRBuilder LLVM.Operand
 expressionToLlvm (AST.I32Literal num) = return $ IR.int32 num
+expressionToLlvm (AST.Add op1 op2) = do
+  op1' <- expressionToLlvm op1
+  op2' <- expressionToLlvm op2
+  IR.add op1' op2'
 
 -- data CompileError = TypeError Types.DataType Types.DataType deriving Show
 
