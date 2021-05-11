@@ -28,7 +28,7 @@ type IRM a = IR.IRBuilderT (State.StateT CompilerState (Except.ExceptT Error.Com
 
 data CompilerState = CompilerState {
   definitions :: [LLVM.Definition],
-  symbols :: Map.Map (String, [Types.DataType]) LLVM.Operand,
+  symbols :: Map.Map (String, [Types.DataType]) (Types.DataType, LLVM.Operand),
   symbSequence :: Int
 }
 
@@ -62,7 +62,7 @@ generateName name = do
   })
   return $ name ++ "_" ++ show thisSeq
 
-findCompiledFunction :: (String, [Types.DataType]) -> CompilerM (Maybe LLVM.Operand)
+findCompiledFunction :: (String, [Types.DataType]) -> CompilerM (Maybe (Types.DataType, LLVM.Operand))
 findCompiledFunction sig = State.gets $ Map.lookup sig . symbols
 
 addDefinition :: LLVM.Definition -> CompilerM ()
@@ -70,12 +70,12 @@ addDefinition def = State.modify $ \s -> s {
   definitions = def : definitions s
 }
 
-addCompiledFunction :: (String, [Types.DataType]) -> LLVM.Operand -> CompilerM ()
+addCompiledFunction :: (String, [Types.DataType]) -> (Types.DataType, LLVM.Operand) -> CompilerM ()
 addCompiledFunction sig def = State.modify $ \s -> s {
   symbols = Map.insert sig def $ symbols s
 }
 
-compileFunction :: (String, [Types.DataType]) -> CompilerM LLVM.Operand
+compileFunction :: (String, [Types.DataType]) -> CompilerM (Types.DataType, LLVM.Operand)
 compileFunction sig = do
   existing <- findCompiledFunction sig
   case existing of
@@ -83,9 +83,10 @@ compileFunction sig = do
     Nothing -> do
       blah <- findTree $ fst sig
       let (AST.TopLevel _ _ [AST.Body expr]) = blah
-      blocks <- IR.execIRBuilderT IR.emptyIRBuilder $ do
-        (_, body) <- expressionToLlvm expr
-        IR.ret body
+      (retTy, blocks) <- IR.runIRBuilderT IR.emptyIRBuilder $ do
+        (ty, body) <- expressionToLlvm expr
+        res <- IR.ret body
+        return ty
       name <- generateName $ fst sig
       addDefinition $ LLVM.GlobalDefinition $ LLVM.functionDefaults {
         G.name = fromString name,
@@ -93,8 +94,9 @@ compileFunction sig = do
         G.basicBlocks = blocks
       }
       let operand = LLVM.ConstantOperand  $ C.GlobalReference (T.FunctionType T.i32 [] False) (fromString name)
-      addCompiledFunction sig operand
-      return operand
+      let res = (retTy, operand)
+      addCompiledFunction sig res
+      return res
 
 expressionToLlvm :: AST.Expression -> IRM (Types.DataType, LLVM.Operand)
 expressionToLlvm (AST.Add op1 op2) = do
@@ -106,9 +108,9 @@ expressionToLlvm (AST.Add op1 op2) = do
 expressionToLlvm (AST.I32Literal num) = return (Types.I32, IR.int32 num)
 expressionToLlvm (AST.I64Literal num) = return (Types.I64, IR.int64 num)
 expressionToLlvm (AST.Reference name) = do
-  func <- lift $ compileFunction (name, [])
+  (ty, func) <- lift $ compileFunction (name, [])
   res <- IR.call func []
-  return (Types.I32, res)
+  return (ty, res)
 
 -- data CompileError = TypeError Types.DataType Types.DataType deriving Show
 
