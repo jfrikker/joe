@@ -1,44 +1,100 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Joe where
 
 import Control.Monad (unless)
 import qualified Control.Monad.Except as Except
+import qualified Control.Monad.Reader as Reader
+import qualified Control.Monad.State as State
+import Control.Monad.Trans (lift)
 import qualified Data.List as List
+import qualified Data.Map as Map
 import Data.String (fromString)
 import qualified Joe.AST as AST
 import qualified Joe.Error as Error
 import qualified Joe.Scope as Scope
 import qualified Joe.Types as Types
 import qualified LLVM.AST as LLVM
+import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.Global as G
 import qualified LLVM.AST.Type as T
 import qualified LLVM.IRBuilder as IR
 
-type CompilerM a = Except.Except Error.CompileError a
+type CompilerM a = State.StateT CompilerState (Except.ExceptT Error.CompileError (Reader.Reader AST.Module)) a
 
-type IRM a = IR.IRBuilderT (Except.Except Error.CompileError) a
+type IRM a = IR.IRBuilderT (State.StateT CompilerState (Except.ExceptT Error.CompileError (Reader.Reader AST.Module))) a
 
-compile :: [AST.TopLevel] -> Either Error.CompileError LLVM.Module
-compile tl = Except.runExcept $ do
-  mainDef <- compileFunction "main" mainBody
+data CompilerState = CompilerState {
+  definitions :: [LLVM.Definition],
+  symbols :: Map.Map (String, [Types.DataType]) LLVM.Operand,
+  symbSequence :: Int
+}
+
+emptyState :: CompilerState
+emptyState = CompilerState {
+  definitions = [],
+  symbols = Map.empty,
+  symbSequence = 0
+}
+
+compile :: AST.Module -> Either Error.CompileError LLVM.Module
+compile = Reader.runReader $ Except.runExceptT $ flip State.evalStateT emptyState $ do
+  compileFunction ("main", [])
+  defs <- State.gets definitions
   return LLVM.defaultModule {
     LLVM.moduleName = "in.j",
-    LLVM.moduleDefinitions = [mainDef]
+    LLVM.moduleDefinitions = defs
   }
-  where (Just (AST.TopLevel _ _ mainBody)) = List.find (\(AST.TopLevel _ n _) -> n == "main") tl
 
-compileFunction :: String -> [AST.PartialDefinition] -> CompilerM LLVM.Definition
-compileFunction name [AST.Body expr] = do
-  blocks <- IR.execIRBuilderT IR.emptyIRBuilder $ do
-    (_, body) <- expressionToLlvm expr
-    IR.ret body
-  return $ LLVM.GlobalDefinition $ LLVM.functionDefaults {
-    G.name = fromString name,
-    G.returnType = T.i32,
-    G.basicBlocks = blocks
-  }
+findTree :: String -> CompilerM AST.TopLevel
+findTree name = do
+  binding <- Reader.asks $ List.find (\(AST.TopLevel _ n _) -> n == name)
+  case binding of
+    Just tree -> return tree
+    Nothing -> Except.throwError $ Error.UnknownBinding name
+
+generateName :: String -> CompilerM String
+generateName name = do
+  thisSeq <- State.state $ \s -> (symbSequence s, s {
+    symbSequence = symbSequence s + 1
+  })
+  return $ name ++ "_" ++ show thisSeq
+
+findCompiledFunction :: (String, [Types.DataType]) -> CompilerM (Maybe LLVM.Operand)
+findCompiledFunction sig = State.gets $ Map.lookup sig . symbols
+
+addDefinition :: LLVM.Definition -> CompilerM ()
+addDefinition def = State.modify $ \s -> s {
+  definitions = def : definitions s
+}
+
+addCompiledFunction :: (String, [Types.DataType]) -> LLVM.Operand -> CompilerM ()
+addCompiledFunction sig def = State.modify $ \s -> s {
+  symbols = Map.insert sig def $ symbols s
+}
+
+compileFunction :: (String, [Types.DataType]) -> CompilerM LLVM.Operand
+compileFunction sig = do
+  existing <- findCompiledFunction sig
+  case existing of
+    Just symb -> return symb
+    Nothing -> do
+      blah <- findTree $ fst sig
+      let (AST.TopLevel _ _ [AST.Body expr]) = blah
+      blocks <- IR.execIRBuilderT IR.emptyIRBuilder $ do
+        (_, body) <- expressionToLlvm expr
+        IR.ret body
+      name <- generateName $ fst sig
+      addDefinition $ LLVM.GlobalDefinition $ LLVM.functionDefaults {
+        G.name = fromString name,
+        G.returnType = T.i32,
+        G.basicBlocks = blocks
+      }
+      let operand = LLVM.ConstantOperand  $ C.GlobalReference (T.FunctionType T.i32 [] False) (fromString name)
+      addCompiledFunction sig operand
+      return operand
 
 expressionToLlvm :: AST.Expression -> IRM (Types.DataType, LLVM.Operand)
 expressionToLlvm (AST.Add op1 op2) = do
@@ -47,9 +103,12 @@ expressionToLlvm (AST.Add op1 op2) = do
   unless (ty1 == ty2) $ Except.throwError $  Error.TypeError ty1 ty2
   res <- IR.add op1' op2'
   return (ty1, res)
-
 expressionToLlvm (AST.I32Literal num) = return (Types.I32, IR.int32 num)
 expressionToLlvm (AST.I64Literal num) = return (Types.I64, IR.int64 num)
+expressionToLlvm (AST.Reference name) = do
+  func <- lift $ compileFunction (name, [])
+  res <- IR.call func []
+  return (Types.I32, res)
 
 -- data CompileError = TypeError Types.DataType Types.DataType deriving Show
 

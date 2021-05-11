@@ -1,5 +1,7 @@
 module Joe.AST where
 
+type Module = [TopLevel]
+
 data TopLevel = TopLevel TypeSignature String [PartialDefinition] deriving Show
 
 data PartialDefinition = FunctionArgument String PartialDefinition |
