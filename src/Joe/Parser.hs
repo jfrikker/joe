@@ -18,23 +18,29 @@ topLevel = do
   literalOp "::"
   ts <- typeSignature
   newline
-  options <- many1 $ do
+  -- options <- many1 $ do
+  --   string name
+  --   ws
+  --   def <- partialDefinition
+  --   newline
+  --   return def
+  option <- do
     string name
     ws
     def <- partialDefinition
     newline
     return def
   emptyLines
-  return $ AST.TopLevel ts name options
+  return $ AST.GlobalBinding $ AST.Binding name ts option
 
 partialDefinition :: Stream s m Char => ParsecT s u m AST.PartialDefinition
-partialDefinition = body <|> arg
-  where body = do
-          literalOp "="
-          AST.Body <$> expression
-        arg = do
-          a <- identifier
-          AST.FunctionArgument a <$> partialDefinition
+partialDefinition = do
+  args <- many1 match
+  literalOp "="
+  AST.PartialDefinition args <$> expression
+
+match :: Stream s m Char => ParsecT s u m AST.Match
+match = AST.Unbound <$> identifier
 
 mod :: Stream s m Char => ParsecT s u m [AST.TopLevel]
 mod = many $ emptyLines >> topLevel

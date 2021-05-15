@@ -11,6 +11,7 @@ import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
 import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Maybe as Maybe
 import Data.String (fromString)
 import qualified Joe.AST as AST
 import qualified Joe.Error as Error
@@ -22,38 +23,32 @@ import qualified LLVM.AST.Global as G
 import qualified LLVM.AST.Type as T
 import qualified LLVM.IRBuilder as IR
 
-type CompilerM a = State.StateT CompilerState (Except.ExceptT Error.CompileError (Reader.Reader AST.Module)) a
+type CompilerM a = Scope.ScopeT (State.StateT CompilerState (Except.Except Error.CompileError)) a
 
-type IRM a = IR.IRBuilderT (State.StateT CompilerState (Except.ExceptT Error.CompileError (Reader.Reader AST.Module))) a
+type IRM a = IR.IRBuilderT (Scope.ScopeT (State.StateT CompilerState (Except.Except Error.CompileError))) a
 
 data CompilerState = CompilerState {
   definitions :: [LLVM.Definition],
-  symbols :: Map.Map (String, [Types.DataType]) (Types.DataType, LLVM.Operand),
+  symbols :: Map.Map (String, Int) LLVM.Operand,
   symbSequence :: Int
 }
 
 emptyState :: CompilerState
 emptyState = CompilerState {
   definitions = [],
-  symbols = Map.empty,
+  symbols= Map.empty,
   symbSequence = 0
 }
 
 compile :: AST.Module -> Either Error.CompileError LLVM.Module
-compile = Reader.runReader $ Except.runExceptT $ flip State.evalStateT emptyState $ do
-  compileFunction ("main", [])
+compile mod = Except.runExcept $ flip State.evalStateT emptyState $ Scope.runScopeT scope $ do
+  compileFunction "main" 0
   defs <- State.gets definitions
   return LLVM.defaultModule {
     LLVM.moduleName = "in.j",
     LLVM.moduleDefinitions = defs
   }
-
-findTree :: String -> CompilerM AST.TopLevel
-findTree name = do
-  binding <- Reader.asks $ List.find (\(AST.TopLevel _ n _) -> n == name)
-  case binding of
-    Just tree -> return tree
-    Nothing -> Except.throwError $ Error.UnknownBinding name
+  where scope = Scope.globalScope $ AST.topLevelBindings mod 
 
 generateName :: String -> CompilerM String
 generateName name = do
@@ -62,7 +57,7 @@ generateName name = do
   })
   return $ name ++ "_" ++ show thisSeq
 
-findCompiledFunction :: (String, [Types.DataType]) -> CompilerM (Maybe (Types.DataType, LLVM.Operand))
+findCompiledFunction :: (String, Int) -> CompilerM (Maybe LLVM.Operand)
 findCompiledFunction sig = State.gets $ Map.lookup sig . symbols
 
 addDefinition :: LLVM.Definition -> CompilerM ()
@@ -70,47 +65,96 @@ addDefinition def = State.modify $ \s -> s {
   definitions = def : definitions s
 }
 
-addCompiledFunction :: (String, [Types.DataType]) -> (Types.DataType, LLVM.Operand) -> CompilerM ()
+addCompiledFunction :: (String, Int) -> LLVM.Operand -> CompilerM ()
 addCompiledFunction sig def = State.modify $ \s -> s {
   symbols = Map.insert sig def $ symbols s
 }
 
-compileFunction :: (String, [Types.DataType]) -> CompilerM (Types.DataType, LLVM.Operand)
-compileFunction sig = do
-  existing <- findCompiledFunction sig
+countArguments :: [AST.PartialDefinition] -> CompilerM Int
+countArguments [def] = return $ AST.partialDefinitionArguments def
+countArguments (p : rest) = do
+  r <- countArguments rest
+  let c = AST.partialDefinitionArguments p
+  unless (r == c) $ Except.throwError Error.MismatchedArguments
+  return c
+
+
+compileFunction :: String -> Int -> CompilerM LLVM.Operand
+compileFunction name args = do
+  existing <- findCompiledFunction (name, args)
   case existing of
     Just symb -> return symb
     Nothing -> do
-      blah <- findTree $ fst sig
-      let (AST.TopLevel _ _ [AST.Body expr]) = blah
-      (retTy, blocks) <- IR.runIRBuilderT IR.emptyIRBuilder $ do
-        (ty, body) <- expressionToLlvm expr
-        res <- IR.ret body
-        return ty
-      name <- generateName $ fst sig
-      addDefinition $ LLVM.GlobalDefinition $ LLVM.functionDefaults {
-        G.name = fromString name,
-        G.returnType = T.i32,
-        G.basicBlocks = blocks
-      }
-      let operand = LLVM.ConstantOperand  $ C.GlobalReference (T.FunctionType T.i32 [] False) (fromString name)
-      let res = (retTy, operand)
-      addCompiledFunction sig res
-      return res
+      (AST.Binding _ overallTy [blah]) <- Scope.resolveBinding name
+      overallTy' <- Scope.resolveType overallTy
+      let (funcTy, body) = removeArgs args overallTy' blah
+      symb <- case (funcTy, body) of
+        (Types.Function argTy retTy, AST.FunctionArgument argName body') -> compileOneArgFunction name argTy retTy argName body'
+        (funcTy', AST.Body body') -> compileNoArgFunction name funcTy' body'
+      addCompiledFunction (name, args) symb
+      return symb
 
-expressionToLlvm :: AST.Expression -> IRM (Types.DataType, LLVM.Operand)
+removeArgs :: Int -> Types.DataType -> AST.PartialDefinition -> (Types.DataType, AST.PartialDefinition)
+removeArgs 0 ty def = (ty, def)
+removeArgs i (Types.Function _ ty) (AST.FunctionArgument _ def) = removeArgs (i - 1) ty def
+
+compileNoArgFunction :: String -> Types.DataType -> AST.Expression -> CompilerM LLVM.Operand 
+compileNoArgFunction name retTy body = do
+  (bodyTy, blocks) <- IR.runIRBuilderT IR.emptyIRBuilder $ do
+    res <- expressionToLlvm body
+    IR.ret $ Types.valueOperand res
+    return $ Types.valueType res
+  unless (retTy == bodyTy) $ Except.throwError $ Error.TypeError retTy bodyTy
+  let retTyLlvm = Types.llvmType retTy
+  addDefinition $ LLVM.GlobalDefinition $ LLVM.functionDefaults {
+    G.name = fromString name,
+    G.parameters = ([], False),
+    G.returnType = retTyLlvm,
+    G.basicBlocks = blocks
+  }
+  return $ LLVM.ConstantOperand $ C.GlobalReference (T.FunctionType retTyLlvm [] False) (fromString name)
+
+compileOneArgFunction :: String -> Types.DataType -> Types.DataType -> String -> AST.Expression -> CompilerM LLVM.Operand 
+compileOneArgFunction name argTy retTy argName body = Scope.withOperand argName (Types.LValue argTy $ LLVM.LocalReference (Types.llvmType argTy) "addr") $ do
+  (bodyTy, blocks) <- IR.runIRBuilderT IR.emptyIRBuilder $ do
+    res <- expressionToLlvm body
+    IR.ret $ Types.valueOperand res
+    return $ Types.valueType res
+  unless (retTy == bodyTy) $ Except.throwError $ Error.TypeError retTy bodyTy
+  let argTyLlvm = Types.llvmType argTy
+  let retTyLlvm = Types.llvmType retTy
+  addDefinition $ LLVM.GlobalDefinition $ LLVM.functionDefaults {
+    G.name = fromString name,
+    G.parameters = ([G.Parameter argTyLlvm (fromString name) []], False),
+    G.returnType = retTyLlvm,
+    G.basicBlocks = blocks
+  }
+  return $ LLVM.ConstantOperand $ C.GlobalReference (T.FunctionType retTyLlvm [argTyLlvm] False) (fromString name)
+
+expressionToLlvm :: AST.Expression -> IRM Types.Value
 expressionToLlvm (AST.Add op1 op2) = do
-  (ty1, op1') <- expressionToLlvm op1
-  (ty2, op2') <- expressionToLlvm op2
-  unless (ty1 == ty2) $ Except.throwError $  Error.TypeError ty1 ty2
-  res <- IR.add op1' op2'
-  return (ty1, res)
-expressionToLlvm (AST.I32Literal num) = return (Types.I32, IR.int32 num)
-expressionToLlvm (AST.I64Literal num) = return (Types.I64, IR.int64 num)
+  v1 <- expressionToLlvm op1
+  v2 <- expressionToLlvm op2
+  unless (Types.valueType v1 == Types.valueType v2) $ Except.throwError $ Error.TypeError (Types.valueType v1) (Types.valueType v2)
+  res <- IR.add (Types.valueOperand v1) (Types.valueOperand v2)
+  return $ Types.LValue (Types.valueType v1) res
+-- expressionToLlvm (AST.Call func arg) = do
+--   func' <- expressionToLlvm func
+--   case func' of
+--     LValue _ _ -> Except.throwError Error.ExpectedFunction
+--     Function _ name args funcOperand -> do
+--       arg' <- expressionToLlvm arg
+--       (resTy, funcRef) <- lift $ compileFunction name (args ++ [valueType arg'])
+--       res <- IR.call funcRef [(valueOperand arg', [])]
+--       return (resTy, res)
+expressionToLlvm (AST.I32Literal num) = return $ Types.LValue Types.I32 $ IR.int32 num
+expressionToLlvm (AST.I64Literal num) = return $ Types.LValue Types.I64 $ IR.int64 num
 expressionToLlvm (AST.Reference name) = do
-  (ty, func) <- lift $ compileFunction (name, [])
+  (AST.Binding _ bindTy _) <- lift $ Scope.resolveBinding name
+  bindTy' <- lift $ Scope.resolveType bindTy
+  func <- lift $ compileFunction name 0
   res <- IR.call func []
-  return (ty, res)
+  return $ Types.LValue bindTy' res
 
 -- data CompileError = TypeError Types.DataType Types.DataType deriving Show
 
