@@ -11,7 +11,7 @@ module Joe.Parser.Util(
 ) where
 
 import Control.Monad (unless)
-import Text.Parsec(Stream, ParsecT, alphaNum, char, many, many1, lower, newline, oneOf, skipMany, upper)
+import Text.Parsec(Stream, ParsecT, alphaNum, char, many, many1, lower, newline, oneOf, skipMany, try, upper)
 
 optWs :: Stream s m Char => ParsecT s u m ()
 optWs = skipMany $ char ' '
@@ -23,10 +23,10 @@ lexeme p = do
   return res
 
 operator :: Stream s m Char => ParsecT s u m String
-operator = lexeme $ many1 $ oneOf ":!#$%&*+./<=>?@\\^|-~"
+operator = lexeme $ many1 $ oneOf ":!#$%&*+./<=>?@\\^|-~()"
 
 literalOp :: Stream s m Char => String -> ParsecT s u m ()
-literalOp expected = do
+literalOp expected = try $ do
   op <- operator
   unless (op == expected) $ fail expected
 

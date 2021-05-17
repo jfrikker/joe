@@ -20,7 +20,7 @@ add next = chainl1 next $ do
   return AST.Add
 
 atom :: Stream s m Char => ParsecT s u m AST.Expression 
-atom = ref <|> intLiteral
+atom = paren <|> ref <|> intLiteral
   where ref = AST.Reference <$> identifier
         intLiteral = lexeme $ do
           num <- many1 digit
@@ -29,3 +29,8 @@ atom = ref <|> intLiteral
         intType c ty = do
           try $ string c
           return ty
+        paren = do
+          literalOp "("
+          res <- expression
+          literalOp ")"
+          return res

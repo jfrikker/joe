@@ -14,7 +14,7 @@ test5 :: I32 -> I32
 test5 = test4 5i32 10i32
 
 test6 :: I32 -> I32
-test6 a = 1i32
+test6 a = 1i32 + a
 
 main :: I32
-main = 3i32 + test6 6i32
+main = test + (test6 6i32)

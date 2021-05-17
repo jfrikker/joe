@@ -4,13 +4,11 @@ module Joe.Parser where
 
 import Joe.Parser.Expression (expression)
 import Joe.Parser.TypeSignature (typeSignature)
-import Joe.Parser.Util (emptyLines, identifier, literalOp)
-import Text.Parsec (Stream, ParsecT, char, many, many1, newline, (<|>), skipMany1, string)
+import Joe.Parser.Util (emptyLines, identifier, lexeme, literalOp)
+import Text.Parsec (Stream, ParsecT, char, many, many1, newline, (<|>), string)
 
 import qualified Joe.AST as AST
-
-ws :: Stream s m Char => ParsecT s u m ()
-ws = skipMany1 $ char ' '
+import qualified Debug.Trace as Debug
 
 topLevel :: Stream s m Char => ParsecT s u m AST.TopLevel
 topLevel = do
@@ -25,22 +23,21 @@ topLevel = do
   --   newline
   --   return def
   option <- do
-    string name
-    ws
+    lexeme $ string name
     def <- partialDefinition
     newline
     return def
   emptyLines
-  return $ AST.GlobalBinding $ AST.Binding name ts option
+  return $ Debug.traceShowId $ AST.GlobalBinding $ AST.Binding name ts option
 
 partialDefinition :: Stream s m Char => ParsecT s u m AST.PartialDefinition
 partialDefinition = do
-  args <- many1 match
+  args <- many match
   literalOp "="
   AST.PartialDefinition args <$> expression
 
 match :: Stream s m Char => ParsecT s u m AST.Match
-match = AST.Unbound <$> identifier
+match = identifier
 
 mod :: Stream s m Char => ParsecT s u m [AST.TopLevel]
 mod = many $ emptyLines >> topLevel

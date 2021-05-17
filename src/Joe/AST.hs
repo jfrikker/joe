@@ -9,7 +9,7 @@ data TopLevel = GlobalBinding Binding deriving Show
 
 data Binding = Binding String TypeSignature PartialDefinition deriving Show
 
-data Match = Unbound String deriving Show
+type Match = String
 
 data PartialDefinition = PartialDefinition [Match] Expression deriving Show
 
@@ -24,9 +24,13 @@ data Expression =
   I64Literal Integer |
   Reference String deriving Show
 
-typeSignatureArguments :: TypeSignature -> Int
-typeSignatureArguments (FunctionType _ res) = 1 + typeSignatureArguments res
-typeSignatureArguments _ = 0
+typeSignatureArguments :: TypeSignature -> [TypeSignature]
+typeSignatureArguments (FunctionType arg res) = arg : typeSignatureArguments res
+typeSignatureArguments _ = []
+
+typeSignatureReturnType :: TypeSignature -> TypeSignature
+typeSignatureReturnType (FunctionType _ res) = typeSignatureReturnType res
+typeSignatureReturnType t = t
 
 partialDefinitionArguments :: PartialDefinition -> Int
 partialDefinitionArguments (PartialDefinition args _) = length args
